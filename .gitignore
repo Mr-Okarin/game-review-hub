@@ -1,0 +1,30 @@
+        # Python cache files
+        __pycache__/
+        *.pyc
+        *.pyo
+        *.pyd
+
+        # Virtual environment folder (if you use one named venv)
+        venv/
+        env/
+        .env
+
+        # OS generated files
+        .DS_Store
+        Thumbs.db
+
+        # IDE / Editor specific files
+        .idea/
+        .vscode/
+        *.swp
+
+        # Local database file (if you were using SQLite)
+        # database.db
+
+        # Sensitive information (like secret keys if stored in files - better to use env vars)
+        # config.py
+        # .secrets
+
+        # Render specific (optional, good practice)
+        .render/
+        

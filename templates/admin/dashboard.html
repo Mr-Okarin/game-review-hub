@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - GameReview Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Apply Inter font to the body and set background color */
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+    </style>
+</head>
+<body class="text-gray-900 flex flex-col min-h-screen">
+
+    <header class="bg-white shadow-md">
+        <nav class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <a href="{{ url_for('index') }}" class="text-2xl font-bold text-indigo-600">GameReview Hub</a>
+            <div class="space-x-4 flex items-center">
+                <a href="{{ url_for('index') }}" class="text-gray-600 hover:text-indigo-600">Home</a>
+                <a href="{{ url_for('list_games') }}" class="text-gray-600 hover:text-indigo-600">Browse Games</a>
+                {% if g.user %}
+                    <a href="{{ url_for('view_wishlist') }}" class="text-gray-600 hover:text-indigo-600">My Wishlist</a>
+                    {% if g.user.is_admin %}
+                        <a href="{{ url_for('admin_dashboard') }}" class="text-purple-600 font-semibold">Admin</a>
+                    {% endif %}
+                    <span class="text-gray-700 text-sm">Hi, {{ g.user['username'] }}!</span>
+                    <a href="{{ url_for('logout') }}" class="text-sm text-red-600 hover:text-red-800">Logout</a>
+                {% endif %}
+                </div>
+        </nav>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-6 text-gray-800">Admin Dashboard</h1>
+
+         {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-4">
+                {% for category, message in messages %}
+                     <div class="p-3 rounded text-sm {{ 'bg-red-100 text-red-700' if category == 'error' else 'bg-green-100 text-green-700' if category == 'success' else 'bg-blue-100 text-blue-700' if category == 'info' else 'bg-yellow-100 text-yellow-700' }}" role="alert">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Admin Actions</h2>
+            <ul class="list-disc list-inside space-y-2">
+                <li><a href="{{ url_for('add_game') }}" class="text-indigo-600 hover:underline">Add New Game</a></li>
+                <li><a href="{{ url_for('manage_games') }}" class="text-indigo-600 hover:underline">Manage Existing Games</a></li>
+                <li>Manage Users (Not Implemented)</li>
+                <li>View Reports (Not Implemented)</li>
+                <li>Manage Genres (Not Implemented)</li>
+            </ul>
+        </div>
+    </main>
+
+    <footer class="bg-white mt-12 py-6 border-t border-gray-200">
+        <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
+             &copy; <span id="year"></span> GameReview Hub. All rights reserved.
+            <script>
+                // Simple script to set the current year in the footer
+                document.getElementById('year').textContent = new Date().getFullYear();
+            </script>
+        </div>
+    </footer>
+
+</body>
+</html>
