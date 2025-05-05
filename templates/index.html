@@ -9,28 +9,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Apply Inter font to the body and set background color */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8; /* Light grayish-blue */
+            background-color: #f0f4f8;
         }
-        /* Simple styling for suggestion cards */
         .suggestion-card {
-             background-color: #ffffff;
-             border-radius: 0.375rem; /* rounded-md */
-             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); /* shadow-md */
-             overflow: hidden;
-             transition: transform 0.2s ease-in-out;
+             background-color: #ffffff; border-radius: 0.375rem;
+             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+             overflow: hidden; transition: transform 0.2s ease-in-out;
         }
-        .suggestion-card:hover {
-            transform: translateY(-4px);
-        }
-        .suggestion-cover {
-            height: 150px; /* Smaller height for suggestions */
-            object-fit: cover;
-            width: 100%;
-             background-color: #e2e8f0; /* Placeholder color */
-        }
+        .suggestion-card:hover { transform: translateY(-4px); }
+        .suggestion-cover { height: 150px; object-fit: cover; width: 100%; background-color: #e2e8f0; }
+        .star-rating-sm { color: #f59e0b; font-size: 0.875rem; /* text-sm */ }
     </style>
 </head>
 <body class="text-gray-900 flex flex-col min-h-screen">
@@ -39,7 +29,8 @@
         <nav class="container mx-auto px-4 py-4 flex justify-between items-center">
             <a href="{{ url_for('index') }}" class="text-2xl font-bold text-indigo-600">GameReview Hub</a>
             <div class="space-x-4 flex items-center">
-                <a href="{{ url_for('index') }}" class="text-indigo-600 font-semibold">Home</a> <a href="{{ url_for('list_games') }}" class="text-gray-600 hover:text-indigo-600">Browse Games</a>
+                <a href="{{ url_for('index') }}" class="text-indigo-600 font-semibold">Home</a>
+                <a href="{{ url_for('list_games') }}" class="text-gray-600 hover:text-indigo-600">Browse Games</a>
                 {% if g.user %}
                     <a href="{{ url_for('view_wishlist') }}" class="text-gray-600 hover:text-indigo-600">My Wishlist</a>
                     <a href="{{ url_for('profile') }}" class="text-gray-600 hover:text-indigo-600">Profile</a> {% if g.user.is_admin %}
@@ -74,7 +65,8 @@
             Browse All Games
         </a>
 
-        {% if g.user and suggestions %} <div class="mt-12">
+        {% if g.user and suggestions %}
+            <div class="mt-12">
                 <h2 class="text-2xl font-semibold mb-4 text-gray-800">Suggestions For You</h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                     {% for game in suggestions %}
@@ -87,25 +79,45 @@
                             >
                             <div class="p-3">
                                 <h3 class="text-md font-semibold text-gray-900 truncate" title="{{ game.title }}">{{ game.title }}</h3>
-                                </div>
+                            </div>
                         </a>
-                    {% endfor %} </div>
+                    {% endfor %}
+                </div>
             </div>
-        {% endif %} <div class="bg-white p-6 rounded-lg shadow-md mt-8">
-            <h2 class="text-2xl font-semibold mb-4">Featured Section</h2>
-            <p>Featured games or recent reviews could be displayed here.</p>
+        {% endif %}
+
+        <div class="bg-white p-6 rounded-lg shadow-md mt-12"> <h2 class="text-2xl font-semibold mb-4">Recent Reviews</h2>
+            {% if recent_reviews %}
+                <div class="space-y-4">
+                    {% for review in recent_reviews %}
+                        <div class="bg-gray-50 p-3 rounded border border-gray-200 shadow-sm">
+                            <div class="flex justify-between items-baseline mb-1">
+                                <a href="{{ url_for('game_detail', game_id=review.game_id) }}" class="font-semibold text-indigo-600 hover:underline">{{ review.game_title }}</a>
+                                <p class="text-xs star-rating-sm">
+                                    {% for i in range(review.rating) %}★{% endfor %}{% for i in range(5 - review.rating) %}☆{% endfor %}
+                                </p>
+                            </div>
+                             <p class="text-xs text-gray-500 mb-2">
+                                By <span class="font-medium">{{ review.username }}</span> on {{ review.timestamp.strftime('%Y-%m-%d') if review.timestamp else 'N/A' }}
+                             </p>
+                             <p class="text-sm text-gray-700 line-clamp-3"> {{ review.comment }}
+                             </p>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                 <p class="text-gray-500 italic">No reviews have been submitted yet.</p>
+            {% endif %}
         </div>
-    </main>
+        </main>
 
     <footer class="bg-white mt-12 py-6 border-t border-gray-200">
         <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
             &copy; <span id="year"></span> GameReview Hub. All rights reserved.
-            <script>
-                // Simple script to set the current year in the footer
-                document.getElementById('year').textContent = new Date().getFullYear();
-            </script>
+            <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
         </div>
     </footer>
 
 </body>
 </html>
+
