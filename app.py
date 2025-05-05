@@ -1,6 +1,5 @@
 # --- app.py ---
-# Flask application with MySQL support, Auth, Reviews, Wishlist, Admin, Search, Suggestions, Profile/Preferences
-# Added: Genres for Game Detail Page
+# Added: Fetching Recent Reviews for Index Page
 
 import mysql.connector
 from flask import (Flask, render_template, g, abort, request,
@@ -12,15 +11,15 @@ from functools import wraps
 # --- Configuration ---
 DB_CONFIG_MYSQL = {
     'user': 'root',
-    'password': '', # UPDATE IF YOU SET A PASSWORD
+    'password': '', # !!! UPDATE IF YOU SET A PASSWORD !!!
     'host': '127.0.0.1',
-    'database': 'game_review_db', # VERIFY DATABASE NAME
+    'database': 'game_review_db', # !!! VERIFY DATABASE NAME !!!
     'raise_on_warnings': True,
     'autocommit': False
 }
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'a-default-fallback-secret-key-for-dev-genres')
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'a-default-fallback-secret-key-for-dev-recent-reviews')
 
 # --- Database Helper Functions ---
 def get_db():
@@ -156,61 +155,100 @@ def logout():
     return redirect(url_for('index'))
 
 # --- Main Application Routes ---
+
+# --- MODIFIED index route ---
 @app.route('/')
 def index():
-    """ Renders the home page and fetches suggestions for logged-in users. """
+    """ Renders the home page, fetches suggestions and recent reviews. """
     suggestions = []
-    if g.user:
-        user_id = g.user['user_id']
+    recent_reviews = [] # Initialize list for recent reviews
+
+    db = get_db() # Get connection once
+    cursor = None # Initialize cursor
+
+    try:
+        cursor = get_cursor()
+
+        # --- Fetch Suggestions (if user logged in) ---
+        if g.user:
+            user_id = g.user['user_id']
+            try:
+                # Get user's preferred genre names
+                pref_query = "SELECT preference_value FROM Preferences WHERE user_id = %s AND preference_type = 'genre'"
+                cursor.execute(pref_query, (user_id,))
+                preferred_genres_result = cursor.fetchall()
+                preferred_genres = [row['preference_value'] for row in preferred_genres_result]
+
+                if preferred_genres:
+                    # Get IDs of games already on wishlist or reviewed by user
+                    wishlist_query = "SELECT game_id FROM Wishlist_Items WHERE user_id = %s"
+                    cursor.execute(wishlist_query, (user_id,))
+                    wishlist_ids = {row['game_id'] for row in cursor.fetchall()}
+
+                    reviewed_query = "SELECT DISTINCT game_id FROM Reviews WHERE user_id = %s"
+                    cursor.execute(reviewed_query, (user_id,))
+                    reviewed_ids = {row['game_id'] for row in cursor.fetchall()}
+
+                    excluded_ids = wishlist_ids.union(reviewed_ids)
+                    excluded_ids_list = list(excluded_ids)
+
+                    genre_placeholders = ', '.join(['%s'] * len(preferred_genres))
+                    if excluded_ids_list:
+                        excluded_placeholders = ', '.join(['%s'] * len(excluded_ids_list))
+                        not_in_clause = f"AND g.game_id NOT IN ({excluded_placeholders})"
+                        params = preferred_genres + excluded_ids_list
+                    else:
+                        not_in_clause = ""
+                        params = preferred_genres
+
+                    suggestion_query = f"""
+                        SELECT DISTINCT g.game_id, g.title, g.cover_image_url
+                        FROM Games g
+                        JOIN Game_Genres gg ON g.game_id = gg.game_id
+                        JOIN Genres gen ON gg.genre_id = gen.genre_id
+                        WHERE gen.name IN ({genre_placeholders}) {not_in_clause}
+                        ORDER BY RAND() LIMIT 5
+                    """
+                    cursor.execute(suggestion_query, params)
+                    suggestions = cursor.fetchall()
+
+            except mysql.connector.Error as e:
+                # Log suggestion error but don't abort, just show no suggestions
+                print(f"Database error fetching suggestions for user {user_id}: {e}")
+                suggestions = []
+            except Exception as e:
+                print(f"Unexpected error fetching suggestions: {e}")
+                suggestions = []
+
+        # --- Fetch Recent Reviews (always fetch, regardless of login) ---
         try:
-            cursor = get_cursor()
-            pref_query = "SELECT preference_value FROM Preferences WHERE user_id = %s AND preference_type = 'genre'"
-            cursor.execute(pref_query, (user_id,))
-            preferred_genres_result = cursor.fetchall()
-            preferred_genres = [row['preference_value'] for row in preferred_genres_result]
-
-            if preferred_genres:
-                wishlist_query = "SELECT game_id FROM Wishlist_Items WHERE user_id = %s"
-                cursor.execute(wishlist_query, (user_id,))
-                wishlist_ids_result = cursor.fetchall()
-                wishlist_ids = {row['game_id'] for row in wishlist_ids_result}
-
-                reviewed_query = "SELECT DISTINCT game_id FROM Reviews WHERE user_id = %s"
-                cursor.execute(reviewed_query, (user_id,))
-                reviewed_ids_result = cursor.fetchall()
-                reviewed_ids = {row['game_id'] for row in reviewed_ids_result}
-
-                excluded_ids = wishlist_ids.union(reviewed_ids)
-                excluded_ids_list = list(excluded_ids)
-
-                genre_placeholders = ', '.join(['%s'] * len(preferred_genres))
-                if excluded_ids_list:
-                    excluded_placeholders = ', '.join(['%s'] * len(excluded_ids_list))
-                    not_in_clause = f"AND g.game_id NOT IN ({excluded_placeholders})"
-                    params = preferred_genres + excluded_ids_list
-                else:
-                    not_in_clause = ""
-                    params = preferred_genres
-
-                suggestion_query = f"""
-                    SELECT DISTINCT g.game_id, g.title, g.cover_image_url
-                    FROM Games g
-                    JOIN Game_Genres gg ON g.game_id = gg.game_id
-                    JOIN Genres gen ON gg.genre_id = gen.genre_id
-                    WHERE gen.name IN ({genre_placeholders})
-                      {not_in_clause}
-                    ORDER BY RAND() LIMIT 5
-                """
-                cursor.execute(suggestion_query, params)
-                suggestions = cursor.fetchall()
-            cursor.close()
+            reviews_query = """
+                SELECT r.rating, r.comment, r.timestamp, u.username, g.title as game_title, g.game_id
+                FROM Reviews r
+                JOIN Users u ON r.user_id = u.user_id
+                JOIN Games g ON r.game_id = g.game_id
+                WHERE r.is_approved = TRUE
+                ORDER BY r.timestamp DESC
+                LIMIT 5
+            """
+            cursor.execute(reviews_query)
+            recent_reviews = cursor.fetchall()
         except mysql.connector.Error as e:
-            print(f"Database error fetching suggestions for user {user_id}: {e}")
-            suggestions = []
-        except Exception as e:
-             print(f"Unexpected error fetching suggestions: {e}")
-             suggestions = []
-    return render_template('index.html', suggestions=suggestions)
+            print(f"Database error fetching recent reviews: {e}")
+            recent_reviews = [] # Ensure empty list on error
+
+    except mysql.connector.Error as e:
+        # Catch potential errors from get_cursor() itself
+        print(f"Database error in index route setup: {e}")
+        # Abort might be too severe here, maybe just flash an error
+        flash("An error occurred loading page data.", "error")
+    finally:
+        if cursor: # Close cursor if it was opened
+            cursor.close()
+
+    # Render the index page, passing both suggestions and recent_reviews
+    return render_template('index.html', suggestions=suggestions, recent_reviews=recent_reviews)
+
 
 @app.route('/games')
 def list_games():
@@ -225,16 +263,12 @@ def list_games():
         abort(500, description="An error occurred while fetching games.")
     return render_template('games.html', games=games)
 
-# --- MODIFIED game_detail route ---
 @app.route('/game/<int:game_id>', methods=['GET', 'POST'])
 def game_detail(game_id):
-    """ Fetches details, reviews, genres, wishlist status; handles review submission. """
     game = None
     reviews = []
-    genres = [] # <-- Initialize list for genres
+    genres = []
     is_in_wishlist = False
-
-    # Handle Review Submission
     if request.method == 'POST' and 'comment' in request.form:
         if g.user is None:
             flash('You must be logged in to submit a review.', 'warning')
@@ -261,60 +295,29 @@ def game_detail(game_id):
                 flash('An error occurred while submitting your review.', 'error')
         else:
             flash(error, 'error')
-
-    # Fetch Game Details, Reviews, Genres, and Wishlist Status
     try:
         cursor = get_cursor()
-        # Fetch game details
         game_query = "SELECT game_id, title, description, developer, platform, release_date, cover_image_url, trailer_url FROM Games WHERE game_id = %s"
         cursor.execute(game_query, (game_id,))
         game = cursor.fetchone()
-
         if game is None:
             cursor.close()
             abort(404, description="Game not found.")
-
-        # Fetch reviews
-        reviews_query = """
-            SELECT r.review_id, r.rating, r.comment, r.timestamp, u.username
-            FROM Reviews r JOIN Users u ON r.user_id = u.user_id
-            WHERE r.game_id = %s AND r.is_approved = TRUE
-            ORDER BY r.timestamp DESC
-        """
+        reviews_query = "SELECT r.review_id, r.rating, r.comment, r.timestamp, u.username FROM Reviews r JOIN Users u ON r.user_id = u.user_id WHERE r.game_id = %s AND r.is_approved = TRUE ORDER BY r.timestamp DESC"
         cursor.execute(reviews_query, (game_id,))
         reviews = cursor.fetchall()
-
-        # *** NEW: Fetch genres for this game ***
-        genres_query = """
-            SELECT gen.name
-            FROM Genres gen
-            JOIN Game_Genres gg ON gen.genre_id = gg.genre_id
-            WHERE gg.game_id = %s
-            ORDER BY gen.name ASC
-        """
+        genres_query = "SELECT gen.name FROM Genres gen JOIN Game_Genres gg ON gen.genre_id = gg.genre_id WHERE gg.game_id = %s ORDER BY gen.name ASC"
         cursor.execute(genres_query, (game_id,))
-        genres = cursor.fetchall() # Will be list of dicts like [{'name': 'RPG'}, {'name': 'Action'}]
-
-        # Check wishlist status
+        genres = cursor.fetchall()
         if g.user:
             wishlist_query = "SELECT 1 FROM Wishlist_Items WHERE user_id = %s AND game_id = %s"
             cursor.execute(wishlist_query, (g.user['user_id'], game_id))
-            if cursor.fetchone():
-                is_in_wishlist = True
-
-        cursor.close() # Close cursor after all fetches
-
+            if cursor.fetchone(): is_in_wishlist = True
+        cursor.close()
     except mysql.connector.Error as e:
         print(f"Database error fetching game details/reviews/genres/wishlist for game {game_id}: {e}")
         abort(500, description="An error occurred while fetching game data.")
-
-    # Render template, passing genres along with other data
-    return render_template('game_detail.html',
-                           game=game,
-                           reviews=reviews,
-                           genres=genres, # <-- Pass genres to template
-                           is_in_wishlist=is_in_wishlist)
-
+    return render_template('game_detail.html', game=game, reviews=reviews, genres=genres, is_in_wishlist=is_in_wishlist)
 
 # --- Wishlist Routes ---
 @app.route('/wishlist')
